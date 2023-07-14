@@ -32,13 +32,13 @@ spec:
             - containerPort: 80
           env:
             - name: WORDPRESS_DB_HOST
-              value: db
+              value: db-wordpress
             - name: WORDPRESS_DB_USER
-              value: exampleuser
+              value: wordpress
             - name: WORDPRESS_DB_PASSWORD
-              value: examplepass
+              value: '123456'
             - name: WORDPRESS_DB_NAME
-              value: exampledb
+              value: wordpress
           volumeMounts:
             - name: wordpress-volume
               mountPath: /var/www/html
@@ -49,10 +49,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: db
+  name: db-wordpress
 spec:
   selector:
-    app: db
+    app: db-wordpress
   ports:
     - protocol: TCP
       port: 3306
@@ -61,34 +61,34 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: db
+  name: db-wordpress
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: db
+      app: db-wordpress
   template:
     metadata:
       labels:
-        app: db
+        app: db-wordpress
     spec:
       containers:
-        - name: db
+        - name: db-wordpress
           image: mysql:5.7
           env:
             - name: MYSQL_DATABASE
-              value: exampledb
+              value: wordpress
             - name: MYSQL_USER
-              value: exampleuser
+              value: wordpress
             - name: MYSQL_PASSWORD
-              value: examplepass
+              value: '123456'
             - name: MYSQL_RANDOM_ROOT_PASSWORD
               value: "1"
           volumeMounts:
-            - name: db-volume
+            - name: db-wordpress-volume
               mountPath: /var/lib/mysql
       volumes:
-        - name: db-volume
+        - name: db-wordpress-volume
           emptyDir: {}
 
 
