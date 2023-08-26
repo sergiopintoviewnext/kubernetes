@@ -24,14 +24,15 @@ spec:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: vars-mysql
+  name: env-vars
   namespace: wordpress
   labels:
     app: wordpress-config-map
 data:
-  MYSQL_DATABASE: wordpress
-  MYSQL_RANDOM_ROOT_PASSWORD: "1"
-  MYSQL_MAX_CONNECTIONS: "100"
+  database-name: wordpress
+  database-root-password: "1"
+  connections: "100"
+  database-host: db-wordpress
 ---
 apiVersion: v1
 kind: Secret
@@ -40,29 +41,8 @@ metadata:
   namespace: wordpress
 type: Opaque
 data:
-  MYSQL_USER: d29yZHByZXNzCg==
-  MYSQL_PASSWORD: MTIzNDU2Cg==
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: vars-wordpress
-  namespace: wordpress
-  labels:
-    app: wordpress-config-map
-data:
-  WORDPRESS_DB_HOST: db-wordpress
-  WORDPRESS_DB_NAME: wordpress
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: wordpress-secrets
-  namespace: wordpress
-type: Opaque
-data:
-  WORDPRESS_DB_USER: d29yZHByZXNzCg==
-  WORDPRESS_DB_PASSWORD: MTIzNDU2Cg==
+  database-user: d29yZHByZXNz
+  database-password: MTIzNDU2
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -109,7 +89,7 @@ spec:
     - protocol: TCP
       port: 8080
       targetPort: 80
-  type: LoadBalancer
+  type: NodePort
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -133,13 +113,25 @@ spec:
             - containerPort: 80
           env:
             - name: WORDPRESS_DB_HOST
-              value: db-wordpress
+              valueFrom:
+                configMapKeyRef:
+                  name: env-vars
+                  key: database-host
             - name: WORDPRESS_DB_USER
-              value: wordpress
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secrets
+                  key: database-user
             - name: WORDPRESS_DB_PASSWORD
-              value: '123456'
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secrets
+                  key: database-password
             - name: WORDPRESS_DB_NAME
-              value: wordpress
+              valueFrom:
+                configMapKeyRef:
+                  name: env-vars
+                  key: database-name         
           volumeMounts:
             - name: wordpress-volume
               mountPath: /var/www/html      
@@ -199,7 +191,7 @@ metadata:
   name: db-wordpress
   namespace: wordpress
 spec:
-  replicas: 4
+  replicas: 1
   selector:
     matchLabels:
       app: db-wordpress
@@ -210,33 +202,33 @@ spec:
     spec:
       containers:
         - name: db-wordpress
-          image: mysql:8.1.0
+          image: mysql:5.7
           env:
             - name: MYSQL_DATABASE
               valueFrom:
                 configMapKeyRef:
-                  name: vars-mysql
-                  key: MYSQL_DATABASE
+                  name: env-vars
+                  key: database-name
             - name: MYSQL_USER
               valueFrom:
                 secretKeyRef:
                   name: mysql-secrets
-                  key: MYSQL_USER
+                  key: database-user
             - name: MYSQL_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: mysql-secrets
-                  key: MYSQL_PASSWORD
+                  key: database-password
             - name: MYSQL_RANDOM_ROOT_PASSWORD
               valueFrom:
                 configMapKeyRef:
-                  name: vars-mysql
-                  key: MYSQL_RANDOM_ROOT_PASSWORD
+                  name: env-vars
+                  key: database-root-password
             - name: MYSQL_MAX_CONNECTIONS
               valueFrom:
                 configMapKeyRef:
-                  name: vars-mysql
-                  key: MYSQL_MAX_CONNECTIONS
+                  name: env-vars
+                  key: connections           
           volumeMounts:
             - name: db-wordpress-volume
               mountPath: /var/lib/mysql
