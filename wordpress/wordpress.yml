@@ -1,15 +1,81 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: wordpress
+  labels:
+    name: wordpress
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: mem-cpu-limit-range
+  namespace: wordpress
+spec:
+  limits:
+  - default:
+      memory: 512Mi
+      cpu: 1
+    defaultRequest:
+      memory: 256Mi
+      cpu: 0.5
+    type: Container
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vars-mysql
+  namespace: wordpress
+  labels:
+    app: wordpress-config-map
+data:
+  MYSQL_DATABASE: wordpress
+  MYSQL_RANDOM_ROOT_PASSWORD: "1"
+  MYSQL_MAX_CONNECTIONS: "100"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysql-secrets
+  namespace: wordpress
+type: Opaque
+data:
+  MYSQL_USER: d29yZHByZXNzCg==
+  MYSQL_PASSWORD: MTIzNDU2Cg==
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vars-wordpress
+  namespace: wordpress
+  labels:
+    app: wordpress-config-map
+data:
+  WORDPRESS_DB_HOST: db-wordpress
+  WORDPRESS_DB_NAME: wordpress
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: wordpress-secrets
+  namespace: wordpress
+type: Opaque
+data:
+  WORDPRESS_DB_USER: d29yZHByZXNzCg==
+  WORDPRESS_DB_PASSWORD: MTIzNDU2Cg==
+---
 apiVersion: v1
 kind: PersistentVolume
 metadata:
   name: wordpress-pv
+  namespace: wordpress
 spec:
+  storageClassName: manual
   capacity:
     storage: 1Gi 
-  volumeMode: Filesystem
   accessModes:
-    - ReadWriteMany
+    - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: local-storage
   hostPath:
     path: /data-wordpress
     type: DirectoryOrCreate
@@ -18,19 +84,24 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: wordpress-pvc
+  namespace: wordpress
 spec:
   volumeName: wordpress-pv
   accessModes:
-    - ReadWriteMany
-  storageClassName: local-storage
+    - ReadWriteOnce
+  storageClassName: manual
   resources:
     requests:
       storage: 1Gi
+  selector:
+    matchLabels:
+      app: wordpress
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: wordpress
+  namespace: wordpress
 spec:
   selector:
     app: wordpress
@@ -44,6 +115,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: wordpress
+  namespace: wordpress
 spec:
   replicas: 4
   selector:
@@ -70,7 +142,7 @@ spec:
               value: wordpress
           volumeMounts:
             - name: wordpress-volume
-              mountPath: /var/www/html
+              mountPath: /var/www/html      
       volumes:
         - name: wordpress-volume
           persistentVolumeClaim:
@@ -80,14 +152,13 @@ apiVersion: v1
 kind: PersistentVolume
 metadata:
   name: wordpress-db-pv
+  namespace: wordpress
 spec:
   capacity:
     storage: 1Gi 
-  volumeMode: Filesystem
   accessModes:
-    - ReadWriteMany
-  persistentVolumeReclaimPolicy: Retain
-  storageClassName: local-storage
+    - ReadWriteOnce
+  storageClassName: manual
   hostPath:
     path: /db-wordpress
     type: DirectoryOrCreate
@@ -96,19 +167,24 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: wordpress-db-pvc
+  namespace: wordpress
 spec:
   volumeName: wordpress-db-pv
   accessModes:
-    - ReadWriteMany
-  storageClassName: local-storage
+    - ReadWriteOnce
+  storageClassName: manual
   resources:
     requests:
-      storage: 1Gi            
+      storage: 1Gi
+  selector:
+    matchLabels:
+      app: db-wordpress
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: db-wordpress
+  namespace: wordpress
 spec:
   selector:
     app: db-wordpress
@@ -121,6 +197,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: db-wordpress
+  namespace: wordpress
 spec:
   replicas: 4
   selector:
@@ -133,18 +210,33 @@ spec:
     spec:
       containers:
         - name: db-wordpress
-          image: mysql:5.7
+          image: mysql:8.1.0
           env:
             - name: MYSQL_DATABASE
-              value: wordpress
+              valueFrom:
+                configMapKeyRef:
+                  name: vars-mysql
+                  key: MYSQL_DATABASE
             - name: MYSQL_USER
-              value: wordpress
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secrets
+                  key: MYSQL_USER
             - name: MYSQL_PASSWORD
-              value: '123456'
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secrets
+                  key: MYSQL_PASSWORD
             - name: MYSQL_RANDOM_ROOT_PASSWORD
-              value: "1"
+              valueFrom:
+                configMapKeyRef:
+                  name: vars-mysql
+                  key: MYSQL_RANDOM_ROOT_PASSWORD
             - name: MYSQL_MAX_CONNECTIONS
-              value: "100"
+              valueFrom:
+                configMapKeyRef:
+                  name: vars-mysql
+                  key: MYSQL_MAX_CONNECTIONS
           volumeMounts:
             - name: db-wordpress-volume
               mountPath: /var/lib/mysql
